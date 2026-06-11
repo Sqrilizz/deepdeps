@@ -1,13 +1,12 @@
 {
   "name": "deepdeps",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "See what you're really installing — dependency analysis tool",
   "bin": {
     "deepdeps": "bin/deepdeps.js"
   },
   "scripts": {
-    "install": "node install.js",
-    "postinstall": "node bin/deepdeps.js --help || true"
+    "install": "node install.js"
   },
   "files": [
     "bin",

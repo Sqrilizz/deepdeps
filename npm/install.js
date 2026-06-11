@@ -133,9 +133,26 @@ async function install() {
 
     console.log(`deepdeps installed successfully`);
   } catch (err) {
-    console.error("Installation failed:", err.message);
-    console.error("Please install via cargo: cargo install deepdeps");
-    process.exit(1);
+    console.error("Download failed:", err.message);
+    console.log("Falling back to cargo install...");
+    try {
+      execSync(
+        `cargo install --git https://github.com/Sqrilizz/deepdeps --tag v${require("./package.json").version}`,
+        { stdio: "inherit" },
+      );
+      // Copy the cargo-installed binary to our bin dir
+      const cargoBin = `/usr/local/cargo/bin/${binaryName}`;
+      if (existsSync(cargoBin)) {
+        renameSync(cargoBin, binaryPath);
+      }
+      console.log("deepdeps installed successfully via cargo");
+    } catch (cargoErr) {
+      console.error("cargo install also failed:", cargoErr.message);
+      console.error(
+        "Please install manually: cargo install --git https://github.com/Sqrilizz/deepdeps",
+      );
+      process.exit(1);
+    }
   }
 }
 

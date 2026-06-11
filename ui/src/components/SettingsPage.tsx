@@ -127,8 +127,8 @@ export default function SettingsPage() {
               desc="Check for CVEs during analysis (requires network)"
             />
             <Input
-              value={treeDepth}
-              onChange={setTreeDepth}
+              value={String(treeDepth)}
+              onChange={(v) => setTreeDepth(Number(v))}
               label="Default tree depth"
               desc="Maximum depth shown in the dependency tree"
               placeholder="10"

@@ -1,0 +1,22 @@
+{
+  "linux-x64": {
+    "rust-target": "x86_64-unknown-linux-gnu",
+    "url": "https://github.com/sqrilizz/deepdeps/releases/download/v0.1.0/deepdeps-x86_64-unknown-linux-gnu.tar.gz"
+  },
+  "linux-arm64": {
+    "rust-target": "aarch64-unknown-linux-gnu",
+    "url": "https://github.com/sqrilizz/deepdeps/releases/download/v0.1.0/deepdeps-aarch64-unknown-linux-gnu.tar.gz"
+  },
+  "darwin-x64": {
+    "rust-target": "x86_64-apple-darwin",
+    "url": "https://github.com/sqrilizz/deepdeps/releases/download/v0.1.0/deepdeps-x86_64-apple-darwin.tar.gz"
+  },
+  "darwin-arm64": {
+    "rust-target": "aarch64-apple-darwin",
+    "url": "https://github.com/sqrilizz/deepdeps/releases/download/v0.1.0/deepdeps-aarch64-apple-darwin.tar.gz"
+  },
+  "win32-x64": {
+    "rust-target": "x86_64-pc-windows-msvc",
+    "url": "https://github.com/sqrilizz/deepdeps/releases/download/v0.1.0/deepdeps-x86_64-pc-windows-msvc.zip"
+  }
+}

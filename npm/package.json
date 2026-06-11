@@ -1,0 +1,33 @@
+{
+  "name": "deepdeps",
+  "version": "0.1.0",
+  "description": "See what you're really installing — dependency analysis tool",
+  "bin": {
+    "deepdeps": "./bin/deepdeps.js"
+  },
+  "scripts": {
+    "install": "node install.js",
+    "postinstall": "node bin/deepdeps.js --help || true"
+  },
+  "files": [
+    "bin",
+    "install.js",
+    "platforms.json"
+  ],
+  "keywords": [
+    "dependencies",
+    "analysis",
+    "security",
+    "supply-chain",
+    "dependency-graph"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/sqrilizz/deepdeps"
+  },
+  "engines": {
+    "node": ">=16"
+  },
+  "preferUnplugged": true
+}

@@ -1,0 +1,359 @@
+use std::fs;
+use anyhow::Result;
+use crate::models::{AnalysisResult, Package, RiskLevel};
+
+fn generate_html(result: &AnalysisResult) -> String {
+    let explosion_factor = result.dependency_explosion_factor();
+    let ecosystem_str = result.ecosystem.as_str();
+    let total_loc_str = result.total_loc.to_string();
+    let total_files_str = result.total_files.to_string();
+
+    let packages_table = build_packages_table(&result.packages);
+    let vuln_section = build_vulnerability_section(&result);
+    let license_section = build_license_section(&result);
+    let risk_section = build_risk_section(&result);
+
+    format!(
+        r#"<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DeepDeps Report - {project}</title>
+<style>
+* {{ margin:0; padding:0; box-sizing:border-box; }}
+body {{ font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif; background:#0d1117; color:#c9d1d9; line-height:1.6; }}
+.container {{ max-width:1200px; margin:0 auto; padding:2rem; }}
+h1 {{ font-size:2rem; color:#58a6ff; margin-bottom:0.5rem; }}
+h2 {{ font-size:1.5rem; color:#58a6ff; margin:2rem 0 1rem; }}
+h3 {{ font-size:1.2rem; color:#c9d1d9; margin:1rem 0; }}
+.header {{ border-bottom:1px solid #30363d; padding-bottom:1rem; margin-bottom:2rem; }}
+.meta {{ color:#8b949e; font-size:0.9rem; }}
+.stats-grid {{ display:grid; grid-template-columns:repeat(auto-fill,minmax(200px,1fr)); gap:1rem; margin:1.5rem 0; }}
+.stat-card {{ background:#161b22; border:1px solid #30363d; border-radius:8px; padding:1.25rem; }}
+.stat-card .value {{ font-size:1.8rem; font-weight:bold; color:#58a6ff; }}
+.stat-card .label {{ font-size:0.85rem; color:#8b949e; margin-top:0.25rem; }}
+.stat-card.danger .value {{ color:#f85149; }}
+.stat-card.warning .value {{ color:#d29922; }}
+.stat-card.success .value {{ color:#3fb950; }}
+table {{ width:100%; border-collapse:collapse; margin:1rem 0; }}
+th, td {{ text-align:left; padding:0.6rem 0.75rem; border-bottom:1px solid #21262d; font-size:0.9rem; }}
+th {{ color:#8b949e; font-weight:600; text-transform:uppercase; font-size:0.75rem; letter-spacing:0.05em; }}
+tr:hover td {{ background:#161b22; }}
+.badge {{ display:inline-block; padding:0.15rem 0.5rem; border-radius:12px; font-size:0.75rem; font-weight:600; }}
+.badge-low {{ background:#1a3a2a; color:#3fb950; }}
+.badge-medium {{ background:#3d2e00; color:#d29922; }}
+.badge-high {{ background:#4a1c1c; color:#f85149; }}
+.badge-critical {{ background:#5c0a0a; color:#ff6b6b; }}
+.health-bar {{ height:6px; background:#21262d; border-radius:3px; margin-top:0.25rem; }}
+.health-fill {{ height:100%; border-radius:3px; background:#3fb950; }}
+.health-fill.warning {{ background:#d29922; }}
+.health-fill.danger {{ background:#f85149; }}
+.explosion {{ display:flex; align-items:center; gap:1.5rem; justify-content:center; padding:2rem; }}
+.explosion-num {{ font-size:3rem; font-weight:bold; }}
+.arrow {{ font-size:2rem; color:#8b949e; }}
+.gpl-warning {{ background:#4a1c1c; border:1px solid #f85149; border-radius:8px; padding:1rem; margin:1rem 0; }}
+.footer {{ border-top:1px solid #30363d; padding-top:1rem; margin-top:3rem; color:#8b949e; font-size:0.85rem; }}
+</style>
+</head>
+<body>
+<div class="container">
+<div class="header">
+<h1>DeepDeps Report</h1>
+<p class="meta">{project} · {ecosystem} · {timestamp}</p>
+<p class="meta">Analysis ID: {id}</p>
+</div>
+
+<h2>Dependency Explosion</h2>
+<div class="explosion">
+<div class="explosion-num" style="color:#58a6ff;">{direct_deps}</div>
+<div class="arrow">→</div>
+<div class="explosion-num" style="color:#f85149;">{total_deps}</div>
+</div>
+<p style="text-align:center;color:#8b949e;">You installed {direct_deps} package(s) — {total_deps} actually installed ({explosion_factor:.1}x explosion factor)</p>
+
+<h2>Overview</h2>
+<div class="stats-grid">
+<div class="stat-card success"><div class="value">{total_loc_str}</div><div class="label">Total Lines of Code</div></div>
+<div class="stat-card"><div class="value">{total_files_str}</div><div class="label">Total Files</div></div>
+<div class="stat-card"><div class="value">{size_display}</div><div class="label">Total Installed Size</div></div>
+<div class="stat-card {health_class}"><div class="value">{health_score:.0}</div><div class="label">Health Score</div></div>
+<div class="stat-card warning"><div class="value">{unused:.0}%</div><div class="label">Unused Code</div></div>
+<div class="stat-card {cve_class}"><div class="value">{cve_count}</div><div class="label">Known CVEs</div></div>
+<div class="stat-card"><div class="value">{max_depth}</div><div class="label">Max Dependency Depth</div></div>
+<div class="stat-card danger"><div class="value">{high_risk}</div><div class="label">High Risk Packages</div></div>
+</div>
+
+<h2>Dependency Tree</h2>
+{packages_table}
+
+{vuln_section}
+
+{risk_section}
+
+{license_section}
+
+<div class="footer">
+<p>Generated by DeepDeps v0.1.0 · See what you're really installing</p>
+</div>
+</div>
+</body>
+</html>"#,
+        project = result.project_name,
+        ecosystem = ecosystem_str,
+        timestamp = &result.timestamp,
+        id = &result.id,
+        direct_deps = result.direct_deps,
+        total_deps = result.total_deps,
+        explosion_factor = explosion_factor,
+        total_loc_str = total_loc_str,
+        total_files_str = total_files_str,
+        size_display = format_size(result.total_size),
+        health_score = result.health_score,
+        health_class = health_class(result.health_score),
+        unused = result.unused_code_percentage,
+        cve_count = result.cve_count,
+        cve_class = if result.cve_count > 0 { "danger" } else { "success" },
+        max_depth = result.max_depth,
+        high_risk = result.high_risk_packages,
+        packages_table = packages_table,
+        vuln_section = vuln_section,
+        risk_section = risk_section,
+        license_section = license_section,
+    )
+}
+
+fn build_packages_table(packages: &[Package]) -> String {
+    let mut rows = String::new();
+    for pkg in packages {
+        let risk_str = pkg.risk_level.as_ref()
+            .map(|r| match r {
+                RiskLevel::Low => "Low",
+                RiskLevel::Medium => "Medium",
+                RiskLevel::High => "High",
+                RiskLevel::Critical => "Critical",
+            })
+            .unwrap_or("Unknown");
+        let risk_class = risk_str.to_lowercase();
+
+        let health = pkg.health_score.map(|s| format!("{:.0}", s)).unwrap_or_else(|| "-".to_string());
+        let size = pkg.installed_size.map(format_size).unwrap_or_else(|| "-".to_string());
+        let direct_mark = if pkg.direct { "●" } else { "○" };
+
+        rows.push_str(&format!(
+            "<tr><td>{direct} {name}</td><td>{version}</td><td>{depth}</td><td>{size}</td><td>{health}</td><td><span class=\"badge badge-{risk_class}\">{risk_str}</span></td></tr>\n",
+            direct = direct_mark,
+            name = html_escape(&pkg.name),
+            version = html_escape(&pkg.version),
+            depth = pkg.depth,
+            size = size,
+            health = health,
+            risk_class = risk_class,
+            risk_str = risk_str,
+        ));
+    }
+
+    format!(
+        "<table>
+<thead><tr><th>Package</th><th>Version</th><th>Depth</th><th>Size</th><th>Health</th><th>Risk</th></tr></thead>
+<tbody>{}</tbody></table>",
+        rows
+    )
+}
+
+fn build_vulnerability_section(result: &AnalysisResult) -> String {
+    let vuln_packages: Vec<&Package> = result.packages.iter()
+        .filter(|p| !p.vulnerabilities.is_empty())
+        .collect();
+
+    if vuln_packages.is_empty() {
+        return "<h2>Security</h2><p style=\"color:#3fb950;\">✓ No known vulnerabilities found</p>".to_string();
+    }
+
+    let mut content = String::from("<h2>Security Vulnerabilities</h2>");
+    for pkg in &vuln_packages {
+        content.push_str(&format!(
+            "<h3>{name} v{version}</h3><table>
+<thead><tr><th>CVE</th><th>Severity</th><th>Summary</th><th>Fixed In</th></tr></thead><tbody>",
+            name = html_escape(&pkg.name),
+            version = html_escape(&pkg.version),
+        ));
+
+        for vuln in &pkg.vulnerabilities {
+            let sev = format!("{:?}", vuln.severity);
+            content.push_str(&format!(
+                "<tr><td>{id}</td><td><span class=\"badge badge-{sev_lower}\">{sev}</span></td><td>{summary}</td><td>{fixed}</td></tr>",
+                id = html_escape(&vuln.id),
+                sev = sev,
+                sev_lower = sev.to_lowercase(),
+                summary = html_escape(&vuln.summary),
+                fixed = html_escape(&vuln.patched_versions),
+            ));
+        }
+        content.push_str("</tbody></table>");
+    }
+
+    content
+}
+
+fn build_license_section(result: &AnalysisResult) -> String {
+    if result.licenses.is_empty() {
+        return String::new();
+    }
+
+    let mut rows = String::new();
+    let mut has_gpl = false;
+
+    for lic in &result.licenses {
+        if lic.name.contains("GPL") {
+            has_gpl = true;
+        }
+        rows.push_str(&format!(
+            "<tr><td>{}</td><td>{}</td></tr>\n",
+            html_escape(&lic.name), lic.count
+        ));
+    }
+
+    let gpl_warning = if has_gpl {
+        "<div class=\"gpl-warning\">⚠ GPL dependency detected — review license compatibility</div>"
+    } else {
+        ""
+    };
+
+    format!(
+        "<h2>Licenses</h2>{}
+<table>
+<thead><tr><th>License</th><th>Count</th></tr></thead>
+<tbody>{}</tbody></table>",
+        gpl_warning, rows
+    )
+}
+
+fn build_risk_section(result: &AnalysisResult) -> String {
+    let high_risk: Vec<&Package> = result.packages.iter()
+        .filter(|p| matches!(p.risk_level, Some(RiskLevel::High | RiskLevel::Critical)))
+        .collect();
+
+    if high_risk.is_empty() {
+        return String::new();
+    }
+
+    let mut content = String::from("<h2>High Risk Packages</h2><table>
+<thead><tr><th>Package</th><th>Version</th><th>Risk</th><th>Health</th><th>CVEs</th></tr></thead><tbody>");
+
+    for pkg in &high_risk {
+        let risk_str = format!("{:?}", pkg.risk_level.as_ref().unwrap());
+        content.push_str(&format!(
+            "<tr><td>{}</td><td>{}</td><td><span class=\"badge badge-{}\">{}</span></td><td>{:.0}</td><td>{}</td></tr>",
+            html_escape(&pkg.name),
+            html_escape(&pkg.version),
+            risk_str.to_lowercase(),
+            risk_str,
+            pkg.health_score.unwrap_or(0.0),
+            pkg.vulnerabilities.len(),
+        ));
+    }
+
+    content.push_str("</tbody></table>");
+    content
+}
+
+fn format_size(bytes: u64) -> String {
+    if bytes >= 1_000_000_000 {
+        format!("{:.1} GB", bytes as f64 / 1_000_000_000.0)
+    } else if bytes >= 1_000_000 {
+        format!("{:.1} MB", bytes as f64 / 1_000_000.0)
+    } else if bytes >= 1_000 {
+        format!("{:.1} KB", bytes as f64 / 1_000.0)
+    } else {
+        format!("{} B", bytes)
+    }
+}
+
+fn health_class(score: f64) -> &'static str {
+    if score >= 70.0 { "success" }
+    else if score >= 40.0 { "warning" }
+    else { "danger" }
+}
+
+fn html_escape(s: &str) -> String {
+    s.replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+        .replace('"', "&quot;")
+        .replace('\'', "&#39;")
+}
+
+pub fn write_html_report(result: &AnalysisResult, output_path: &str) -> Result<String> {
+    let html = generate_html(result);
+    let path = if output_path.is_empty() {
+        let home = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
+        let dir = format!("{}/.deepdeps/reports", home);
+        let _ = fs::create_dir_all(&dir);
+        format!("{}/report-{}.html", dir, &result.id[..8])
+    } else {
+        output_path.to_string()
+    };
+
+    fs::write(&path, &html)?;
+    Ok(path)
+}
+
+pub fn generate_markdown(result: &AnalysisResult) -> String {
+    let mut md = String::new();
+    md.push_str(&format!("# DeepDeps Report: {}\n\n", result.project_name));
+    md.push_str(&format!("**Ecosystem:** {}  \n", result.ecosystem.as_str()));
+    md.push_str(&format!("**Timestamp:** {}  \n", result.timestamp));
+    md.push_str(&format!("**Analysis ID:** {}\n\n", result.id));
+
+    md.push_str("## Summary\n\n");
+    md.push_str(&format!("- Direct Dependencies: {}\n", result.direct_deps));
+    md.push_str(&format!("- Total Dependencies: {}\n", result.total_deps));
+    md.push_str(&format!("- Dependency Explosion: {:.1}x\n", result.dependency_explosion_factor()));
+    md.push_str(&format!("- Max Depth: {}\n", result.max_depth));
+    md.push_str(&format!("- Total LOC: {}\n", result.total_loc));
+    md.push_str(&format!("- Total Size: {}\n", format_size(result.total_size)));
+    md.push_str(&format!("- Health Score: {:.0}\n", result.health_score));
+    md.push_str(&format!("- Known CVEs: {}\n", result.cve_count));
+    md.push_str(&format!("- High Risk Packages: {}\n\n", result.high_risk_packages));
+
+    md.push_str("## Packages\n\n");
+    md.push_str("| Name | Version | Direct | Depth | Size | Health | Risk |\n");
+    md.push_str("|------|---------|--------|-------|------|--------|------|\n");
+    for pkg in &result.packages {
+        let direct = if pkg.direct { "✓" } else { "" };
+        let size = pkg.installed_size.map(format_size).unwrap_or_else(|| "-".to_string());
+        let health = pkg.health_score.map(|s| format!("{:.0}", s)).unwrap_or_else(|| "-".to_string());
+        let risk = pkg.risk_level.as_ref().map(|r| format!("{:?}", r)).unwrap_or_else(|| "-".to_string());
+        md.push_str(&format!("| {} | {} | {} | {} | {} | {} | {} |\n", pkg.name, pkg.version, direct, pkg.depth, size, health, risk));
+    }
+
+    md
+}
+
+pub fn write_report(result: &AnalysisResult, format: &str, output_path: &str) -> Result<String> {
+    match format {
+        "html" => write_html_report(result, output_path),
+        "markdown" | "md" => {
+            let md = generate_markdown(result);
+            let path = if output_path.is_empty() {
+                format!("report-{}.md", &result.id[..8])
+            } else {
+                output_path.to_string()
+            };
+            fs::write(&path, &md)?;
+            Ok(path)
+        }
+        "json" => {
+            let json = serde_json::to_string_pretty(result)?;
+            let path = if output_path.is_empty() {
+                format!("report-{}.json", &result.id[..8])
+            } else {
+                output_path.to_string()
+            };
+            fs::write(&path, &json)?;
+            Ok(path)
+        }
+        _ => anyhow::bail!("Unsupported format: {}", format),
+    }
+}

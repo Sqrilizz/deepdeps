@@ -1,6 +1,6 @@
-[package]
+        [package]
 name = "deepdeps"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 description = "See what you're really installing - dependency analysis tool"
 

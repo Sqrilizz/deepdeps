@@ -1,9 +1,9 @@
 {
   "name": "deepdeps",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "See what you're really installing — dependency analysis tool",
   "bin": {
-    "deepdeps": "./bin/deepdeps.js"
+    "deepdeps": "bin/deepdeps.js"
   },
   "scripts": {
     "install": "node install.js",
@@ -11,6 +11,7 @@
   },
   "files": [
     "bin",
+    "README.md",
     "install.js",
     "platforms.json"
   ],
@@ -24,7 +25,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/sqrilizz/deepdeps"
+    "url": "git+https://github.com/sqrilizz/deepdeps.git"
   },
   "engines": {
     "node": ">=16"
